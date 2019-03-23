@@ -116,3 +116,8 @@ all.config
 
 # fetched Android config fragments
 android/configs/android-*.cfg
+
+# ignore build script and out folder
+darkonah.sh
+dx.sh
+out
