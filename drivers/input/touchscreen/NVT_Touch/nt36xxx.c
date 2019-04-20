@@ -2058,15 +2058,12 @@ static int fb_notifier_callback(struct notifier_block *self, unsigned long event
 	struct nvt_ts_data *ts =
 		container_of(self, struct nvt_ts_data, fb_notif);
 
-	if (evdata && evdata->data && event == FB_EARLY_EVENT_BLANK) {
+	if (evdata && evdata->data) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_POWERDOWN) {
+		if (event == FB_EARLY_EVENT_BLANK && *blank == FB_BLANK_POWERDOWN) {
 			flush_work(&ts->resume_work);
 			schedule_work(&ts->suspend_work);
-		}
-	} else if (evdata && evdata->data && event == FB_EVENT_BLANK) {
-		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK) {
+		} else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK) {
 			flush_work(&ts->suspend_work);
 			schedule_work(&ts->resume_work);
 		}
