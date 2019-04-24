@@ -44,8 +44,8 @@ extern char mdss_mdp_panel[MDSS_MAX_PANEL_LEN];
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
-static unsigned int bl_level_soft_limit = 16;
-module_param(bl_level_soft_limit, uint, 0644);
+static unsigned short bl_level_soft_limit = 16;
+module_param(bl_level_soft_limit, ushort, 0644);
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
