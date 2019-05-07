@@ -372,7 +372,7 @@ static int cdfinger_eint_gpio_init(struct cdfingerfp_data *pdata)
 
 	error = request_threaded_irq(gpio_to_irq(pdata->irq_num),
 				     cdfinger_eint_handler, NULL,
-				     IRQF_TRIGGER_RISING,
+				     IRQF_TRIGGER_RISING | IRQF_PERF_CRITICAL,
 				     "cdfinger_eint", (void *)pdata);
 	if (error < 0) {
 		CDFINGER_ERR("cdfinger irq init err\n");
