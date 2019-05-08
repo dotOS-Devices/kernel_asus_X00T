@@ -174,8 +174,6 @@ static void spi_clock_set(struct gf_dev *gf_dev, int speed)
 
 static int gfspi_ioctl_clk_init(struct gf_dev *data)
 {
-	pr_debug("%s: enter\n", __func__);
-
 	data->clk_enabled = 0;
 	data->core_clk = clk_get(&data->spi->dev, "core_clk");
 	if (IS_ERR_OR_NULL(data->core_clk)) {
@@ -195,8 +193,6 @@ static int gfspi_ioctl_clk_init(struct gf_dev *data)
 static int gfspi_ioctl_clk_enable(struct gf_dev *data)
 {
 	int err;
-
-	pr_debug("%s: enter\n", __func__);
 
 	if (data->clk_enabled)
 		return 0;
@@ -221,8 +217,6 @@ static int gfspi_ioctl_clk_enable(struct gf_dev *data)
 
 static int gfspi_ioctl_clk_disable(struct gf_dev *data)
 {
-	pr_debug("%s: enter\n", __func__);
-
 	if (!data->clk_enabled)
 		return 0;
 
@@ -235,8 +229,6 @@ static int gfspi_ioctl_clk_disable(struct gf_dev *data)
 
 static int gfspi_ioctl_clk_uninit(struct gf_dev *data)
 {
-	pr_debug("%s: enter\n", __func__);
-
 	if (data->clk_enabled)
 		gfspi_ioctl_clk_disable(data);
 
@@ -260,51 +252,41 @@ static void nav_event_input(struct gf_dev *gf_dev, gf_nav_event_t nav_event)
 
 	switch (nav_event) {
 	case GF_NAV_FINGER_DOWN:
-		pr_debug("%s nav finger down\n", __func__);
 		break;
 
 	case GF_NAV_FINGER_UP:
-		pr_debug("%s nav finger up\n", __func__);
 		break;
 
 	case GF_NAV_DOWN:
 		nav_input = GF_NAV_INPUT_DOWN;
-		pr_debug("%s nav down\n", __func__);
 		break;
 
 	case GF_NAV_UP:
 		nav_input = GF_NAV_INPUT_UP;
-		pr_debug("%s nav up\n", __func__);
 		break;
 
 	case GF_NAV_LEFT:
 		nav_input = GF_NAV_INPUT_LEFT;
-		pr_debug("%s nav left\n", __func__);
 		break;
 
 	case GF_NAV_RIGHT:
 		nav_input = GF_NAV_INPUT_RIGHT;
-		pr_debug("%s nav right\n", __func__);
 		break;
 
 	case GF_NAV_CLICK:
 		nav_input = GF_NAV_INPUT_CLICK;
-		pr_debug("%s nav click\n", __func__);
 		break;
 
 	case GF_NAV_HEAVY:
 		nav_input = GF_NAV_INPUT_HEAVY;
-		pr_debug("%s nav heavy\n", __func__);
 		break;
 
 	case GF_NAV_LONG_PRESS:
 		nav_input = GF_NAV_INPUT_LONG_PRESS;
-		pr_debug("%s nav long press\n", __func__);
 		break;
 
 	case GF_NAV_DOUBLE_CLICK:
 		nav_input = GF_NAV_INPUT_DOUBLE_CLICK;
-		pr_debug("%s nav double click\n", __func__);
 		break;
 
 	default:
@@ -383,21 +365,17 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case GF_IOC_INIT:
-		pr_debug("%s GF_IOC_INIT\n", __func__);
 		if (copy_to_user((void __user *)arg, (void *)&netlink_route, sizeof(u8))) {
 			retval = -EFAULT;
 			break;
 		}
 		break;
 	case GF_IOC_EXIT:
-		pr_debug("%s GF_IOC_EXIT\n", __func__);
 		break;
 	case GF_IOC_DISABLE_IRQ:
-		pr_debug("%s GF_IOC_DISABEL_IRQ\n", __func__);
 		commonfp_irq_disable();
 		break;
 	case GF_IOC_ENABLE_IRQ:
-		pr_debug("%s GF_IOC_ENABLE_IRQ\n", __func__);
 		commonfp_irq_enable();
 		break;
 	case GF_IOC_RESET:
@@ -415,7 +393,6 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 #if defined(SUPPORT_NAV_EVENT)
 	case GF_IOC_NAV_EVENT:
-		pr_debug("%s GF_IOC_NAV_EVENT\n", __func__);
 		if (copy_from_user(&nav_event, (gf_nav_event_t *)arg, sizeof(gf_nav_event_t))) {
 			pr_info("Failed to copy nav event from user to kernel\n");
 			retval = -EFAULT;
@@ -427,23 +404,16 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #endif
 
 	case GF_IOC_ENABLE_SPI_CLK:
-		pr_debug("%s GF_IOC_ENABLE_SPI_CLK\n", __func__);
 #ifdef AP_CONTROL_CLK
 		gfspi_ioctl_clk_enable(gf_dev);
-#else
-		pr_debug("Doesn't support control clock.\n");
 #endif
 		break;
 	case GF_IOC_DISABLE_SPI_CLK:
-		pr_debug("%s GF_IOC_DISABLE_SPI_CLK\n", __func__);
 #ifdef AP_CONTROL_CLK
 		gfspi_ioctl_clk_disable(gf_dev);
-#else
-		pr_debug("Doesn't support control clock\n");
 #endif
 		break;
 	case GF_IOC_ENABLE_POWER:
-		pr_debug("%s GF_IOC_ENABLE_POWER\n", __func__);
 		if (gf_dev->device_available == 1)
 			pr_info("Sensor has already powered-on.\n");
 		else
@@ -451,7 +421,6 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		gf_dev->device_available = 1;
 		break;
 	case GF_IOC_DISABLE_POWER:
-		pr_debug("%s GF_IOC_DISABLE_POWER\n", __func__);
 		if (gf_dev->device_available == 0)
 			pr_info("Sensor has already powered-off.\n");
 		else
@@ -459,16 +428,12 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		gf_dev->device_available = 0;
 		break;
 	case GF_IOC_ENTER_SLEEP_MODE:
-		pr_debug("%s GF_IOC_ENTER_SLEEP_MODE\n", __func__);
 		break;
 	case GF_IOC_GET_FW_INFO:
-		pr_debug("%s GF_IOC_GET_FW_INFO\n", __func__);
 		break;
 	case GF_IOC_REMOVE:
-		pr_debug("%s GF_IOC_REMOVE\n", __func__);
 		break;
 	case GF_IOC_CHIP_INFO:
-		pr_debug("%s GF_IOC_CHIP_INFO\n", __func__);
 		if (copy_from_user(&info, (struct gf_ioc_chip_info *)arg, sizeof(struct gf_ioc_chip_info))) {
 			retval = -EFAULT;
 			break;
@@ -710,7 +675,6 @@ static int gf_probe(struct platform_device *pdev)
 				gf_dev, GF_DEV_NAME);
 		status = IS_ERR(dev) ? PTR_ERR(dev) : 0;
 	} else {
-		dev_dbg(&gf_dev->spi->dev, "no minor number available!\n");
 		status = -ENODEV;
 		mutex_unlock(&device_list_lock);
 		goto error_hw;
