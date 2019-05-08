@@ -34,6 +34,7 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
+#include <linux/atomic.h>
 
 #define NVT_DEBUG 0
 
@@ -151,6 +152,7 @@ struct nvt_ts_data {
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
+	atomic_t irq_enabled;
 	uint8_t fw_ver;
 	uint8_t x_num;
 	uint8_t y_num;

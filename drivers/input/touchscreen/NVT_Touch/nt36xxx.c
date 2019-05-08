@@ -43,9 +43,6 @@
 #include <linux/input/mt.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-//Huaqin add for Reduce the bright screen time by qimaokang at 2018/4/20 start
-#include <linux/kthread.h>
-//Huaqin add for Reduce the bright screen time by qimaokang at 2018/4/20 end
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -139,7 +136,6 @@ static int nvt_lcm_bias_power_deinit(struct nvt_ts_data *data)
 
 }
 
-
 static int nvt_lcm_power_source_ctrl(struct nvt_ts_data *data, int enable)
 {
 	int rc;
@@ -195,7 +191,6 @@ static int nvt_lcm_power_source_ctrl(struct nvt_ts_data *data, int enable)
 		NVT_ERR("Regulator lcm_ibb or lcm_lab is invalid");
 	return 0;
 }
-
 #endif
 // Huaqin add for vsp/vsn. by zhengwu.lu. at 2018/03/07  end
 
@@ -218,29 +213,27 @@ extern void Boot_Update_Firmware(struct work_struct *work);
 
 #if defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
-static void touch_resume_worker(struct work_struct *work);
-static void touch_suspend_worker(struct work_struct *work);
+static inline void touch_resume_worker(struct work_struct *work);
+static inline void touch_suspend_worker(struct work_struct *work);
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
 #endif
 
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-static atomic_t nvt_irq_status = ATOMIC_INIT(1);
-void nvt_irq_enable(void)
+static inline void nvt_irq_enable(void)
 {
-	if (!atomic_cmpxchg(&nvt_irq_status,0,1)) {
+	if (atomic_cmpxchg(&ts->irq_enabled,0,1) == 0) {
 		enable_irq(ts->client->irq);
 	}
 }
 
-void nvt_irq_disable(void)
+static inline void nvt_irq_disable(void)
 {
-	if (atomic_cmpxchg(&nvt_irq_status,1,0)) {
-		disable_irq(ts->client->irq);
+	if (atomic_cmpxchg(&ts->irq_enabled,1,0) == 1) {
+		disable_irq_nosync(ts->client->irq);
 	}
 }
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
+
 // Huaqin add for ZQL1650-1072. by zhengwu.lu. at 2018/04/23  start
 extern int tp_status_fun(void);
 // Huaqin add for ZQL1650-1072. by zhengwu.lu. at 2018/04/23  end
@@ -1321,10 +1314,7 @@ static void nvt_ts_work_func(struct work_struct *work)
 	if (bTouchIsAwake == 0) {
 		input_id = (uint8_t)(point_data[1] >> 3);
 		nvt_ts_wakeup_gesture_report(input_id);
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-		//enable_irq(ts->client->irq);
 		nvt_irq_enable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 		mutex_unlock(&ts->lock);
 		return;
 	}
@@ -1422,10 +1412,7 @@ static void nvt_ts_work_func(struct work_struct *work)
 	input_sync(ts->input_dev);
 
 XFER_ERROR:
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-	//enable_irq(ts->client->irq);
 	nvt_irq_enable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 	mutex_unlock(&ts->lock);
 }
@@ -1439,12 +1426,9 @@ return:
 *******************************************************/
 static irqreturn_t nvt_ts_irq_handler(int32_t irq, void *dev_id)
 {
-	//disable_irq_nosync(ts->client->irq);
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-	if (atomic_cmpxchg(&nvt_irq_status,1,0)) {
-	disable_irq_nosync(ts->client->irq);
+	if (atomic_cmpxchg(&ts->irq_enabled,1,0) == 1) {
+		disable_irq_nosync(ts->client->irq);
 	}
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 #if WAKEUP_GESTURE
 	if (bTouchIsAwake == 0) {
@@ -1557,6 +1541,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	}
 
 	ts->client = client;
+	atomic_set(&ts->irq_enabled, 0);
 	i2c_set_clientdata(client, ts);
 
 	//---parse dts---
@@ -1612,8 +1597,8 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	nvt_get_fw_info();
 	mutex_unlock(&ts->lock);
 
-	//---create workqueue---
-	nvt_wq = create_workqueue("nvt_wq");
+	//---allocate workqueue---
+	nvt_wq = alloc_workqueue("nvt_wq", WQ_HIGHPRI, 0);
 	if (!nvt_wq) {
 		NVT_ERR("nvt_wq create workqueue failed\n");
 		ret = -ENOMEM;
@@ -1700,18 +1685,15 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 		NVT_LOG("int_trigger_type=%d\n", ts->int_trigger_type);
 
 #if WAKEUP_GESTURE
-		ret = request_irq(client->irq, nvt_ts_irq_handler, ts->int_trigger_type | IRQF_NO_SUSPEND | IRQF_PERF_CRITICAL, client->name, ts);
+		ret = request_threaded_irq(client->irq, NULL, nvt_ts_irq_handler, ts->int_trigger_type | IRQF_ONESHOT | IRQF_NO_SUSPEND | IRQF_PERF_CRITICAL, client->name, ts);
 #else
-		ret = request_irq(client->irq, nvt_ts_irq_handler, ts->int_trigger_type | IRQF_PERF_CRITICAL, client->name, ts);
+		ret = request_threaded_irq(client->irq, NULL, nvt_ts_irq_handler, ts->int_trigger_type | IRQF_ONESHOT | IRQF_PERF_CRITICAL, client->name, ts);
 #endif
 		if (ret != 0) {
 			NVT_ERR("request irq failed. ret=%d\n", ret);
 			goto err_int_request_failed;
 		} else {
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-			//disable_irq(client->irq);
 			nvt_irq_disable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 			NVT_LOG("request irq %d succeed\n", client->irq);
 		}
 	}
@@ -1740,7 +1722,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 /********************add protect , 20170908***********************/
 #if NVT_TOUCH_ESD_PROTECT
 	INIT_DELAYED_WORK(&nvt_esd_check_work, nvt_esd_check_func);
-	nvt_esd_check_wq = create_workqueue("nvt_esd_check_wq");
+	nvt_esd_check_wq = alloc_workqueue("nvt_esd_check_wq", WQ_HIGHPRI, 0);
 	queue_delayed_work(nvt_esd_check_wq, &nvt_esd_check_work,
 	msecs_to_jiffies(NVT_TOUCH_ESD_CHECK_PERIOD));
 #endif
@@ -1775,6 +1757,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	er = create_gesture_node();
 #endif
 
+	atomic_set(&ts->irq_enabled, 1);
 
 #if defined(CONFIG_FB)
 	INIT_WORK(&ts->resume_work, touch_resume_worker);
@@ -1798,10 +1781,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 
 	bTouchIsAwake = 1;
 	NVT_LOG("end\n");
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-	//enable_irq(client->irq);
 	nvt_irq_enable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 	return 0;
 
@@ -1917,10 +1897,7 @@ static int32_t nvt_ts_suspend(struct device *dev)
 
 #if WAKEUP_GESTURE
 	if (!allow_gesture) {
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-		//disable_irq(ts->client->irq);
 		nvt_irq_disable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 		//---write i2c command to enter "deep sleep mode"---
 		buf[0] = EVENT_MAP_HOST_CMD;
@@ -1939,10 +1916,7 @@ static int32_t nvt_ts_suspend(struct device *dev)
 		NVT_LOG("Enter gesture mode\n");
 	}
 #else // WAKEUP_GESTURE
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
-	//disable_irq(ts->client->irq);
 	nvt_irq_disable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 	//---write i2c command to enter "deep sleep mode"---
 	buf[0] = EVENT_MAP_HOST_CMD;
@@ -2009,9 +1983,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 	nvt_bootloader_reset();
 	nvt_check_fw_reset_state(RESET_STATE_REK);
 
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform start
 	nvt_irq_enable();
-// Huaqin add for ctp lose efficacy by zhengwu.lu. at 2018/04/18 For Platform end
 
 // Huaqin add for esd check function. by zhengwu.lu. at 2018/2/28  start
 #if NVT_TOUCH_ESD_PROTECT
@@ -2028,23 +2000,16 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 	return 0;
 }
-//Huaqin add for Reduce the bright screen time by qimaokang at 2018/4/20 start
-int fb_nvt_ts_resume(void *data)
-{
-	nvt_ts_resume(data);
 
-	return 0;
-}
-//Huaqin add for Reduce the bright screen time by qimaokang at 2018/4/20 end
 #if defined(CONFIG_FB)
-static void touch_resume_worker(struct work_struct *work)
+static inline void touch_resume_worker(struct work_struct *work)
 {
 	struct nvt_ts_data *ts = container_of(work, typeof(*ts), resume_work);
 
 	nvt_ts_resume(&ts->client->dev);
 }
 
-static void touch_suspend_worker(struct work_struct *work)
+static inline void touch_suspend_worker(struct work_struct *work)
 {
 	struct nvt_ts_data *ts = container_of(work, typeof(*ts), suspend_work);
 
