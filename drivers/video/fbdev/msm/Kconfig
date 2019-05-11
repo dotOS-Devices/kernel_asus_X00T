@@ -138,11 +138,4 @@ config FB_MSM_FRAME_BOOST_TIMEOUT
 	  when a new frame is committed to a rendering display, counting from when the
 	  last input event was received.
 
-config KLAPSE
-    bool CONFIG_KLAPSE
-    depends on FB_MSM_MDSS
-    default n
-    help
-        A simple rgb dynamic lapsing module similar to LineageOS' livedisplay
-
 endif
