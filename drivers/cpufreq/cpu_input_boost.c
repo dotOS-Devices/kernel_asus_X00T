@@ -151,12 +151,16 @@ static void update_stune_boost(struct boost_drv *b, int value)
 	if (value && !b->stune_active)
 		b->stune_active = !do_stune_boost("top-app", value,
 						  &b->stune_slot);
+
+			do_prefer_idle("top-app", 1);
 }
 
 static void clear_stune_boost(struct boost_drv *b)
 {
 	if (b->stune_active)
 		b->stune_active = reset_stune_boost("top-app", b->stune_slot);
+
+		do_prefer_idle("top-app", 0);
 }
 #endif
 
