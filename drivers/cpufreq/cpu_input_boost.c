@@ -153,6 +153,7 @@ static void update_stune_boost(struct boost_drv *b, int value)
 						  &b->stune_slot);
 
 			do_prefer_idle("top-app", 1);
+			do_prefer_idle("foreground", 1);
 }
 
 static void clear_stune_boost(struct boost_drv *b)
@@ -161,6 +162,7 @@ static void clear_stune_boost(struct boost_drv *b)
 		b->stune_active = reset_stune_boost("top-app", b->stune_slot);
 
 		do_prefer_idle("top-app", 0);
+		do_prefer_idle("foreground", 0);
 }
 #endif
 
