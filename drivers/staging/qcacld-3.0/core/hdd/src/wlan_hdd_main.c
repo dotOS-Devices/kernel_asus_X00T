@@ -65,7 +65,6 @@
 #include <linux/ctype.h>
 #include <linux/compat.h>
 #include <linux/reboot.h>
-#include <linux/random.h>
 #ifdef MSM_PLATFORM
 #include <soc/qcom/subsystem_restart.h>
 #endif
@@ -6580,6 +6579,32 @@ out:
 }
 
 /**
+ * hdd_rx_wake_lock_destroy() - Destroy RX wakelock
+ * @hdd_ctx:	HDD context.
+ *
+ * Destroy RX wakelock.
+ *
+ * Return: None.
+ */
+static void hdd_rx_wake_lock_destroy(hdd_context_t *hdd_ctx)
+{
+	qdf_wake_lock_destroy(&hdd_ctx->rx_wake_lock);
+}
+
+/**
+ * hdd_rx_wake_lock_create() - Create RX wakelock
+ * @hdd_ctx:	HDD context.
+ *
+ * Create RX wakelock.
+ *
+ * Return: None.
+ */
+static void hdd_rx_wake_lock_create(hdd_context_t *hdd_ctx)
+{
+	qdf_wake_lock_create(&hdd_ctx->rx_wake_lock, "qcom_rx_wakelock");
+}
+
+/**
  * hdd_roc_context_init() - Init ROC context
  * @hdd_ctx:	HDD context.
  *
@@ -6632,6 +6657,8 @@ static int hdd_context_deinit(hdd_context_t *hdd_ctx)
 	hdd_roc_context_destroy(hdd_ctx);
 
 	hdd_sap_context_destroy(hdd_ctx);
+
+	hdd_rx_wake_lock_destroy(hdd_ctx);
 
 	hdd_tdls_context_destroy(hdd_ctx);
 
@@ -8683,6 +8710,8 @@ static int hdd_context_init(hdd_context_t *hdd_ctx)
 
 	hdd_tdls_context_init(hdd_ctx, false);
 
+	hdd_rx_wake_lock_create(hdd_ctx);
+
 	ret = hdd_sap_context_init(hdd_ctx);
 	if (ret)
 		goto scan_destroy;
@@ -8713,6 +8742,7 @@ sap_destroy:
 
 scan_destroy:
 	hdd_scan_context_destroy(hdd_ctx);
+	hdd_rx_wake_lock_destroy(hdd_ctx);
 	hdd_tdls_context_destroy(hdd_ctx);
 
 list_destroy:
@@ -8882,10 +8912,8 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 	if (ret)
 		goto err_deinit_hdd_context;
 
-#ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
 	wlan_logging_set_log_to_console(hdd_ctx->config->wlanLoggingToConsole);
 	wlan_logging_set_active(hdd_ctx->config->wlanLoggingEnable);
-#endif
 
 	hdd_ctx->is_ssr_in_progress = false;
 
@@ -9769,49 +9797,6 @@ void hdd_populate_random_mac_addr(hdd_context_t *hdd_ctx, uint32_t num)
 	}
 }
 
-static int randomize_mac = 1;
-
-static struct ctl_table randomize_mac_table[] =
-{
-       {
-               .procname       = "randomize_mac",
-               .data           = &randomize_mac,
-               .maxlen         = sizeof(int),
-               .mode           = 0600,
-               .proc_handler   = proc_dointvec
-       },
-       { }
-};
-
-static struct ctl_table cnss_table[] =
-{
-       {
-               .procname       = "cnss",
-               .maxlen         = 0,
-               .mode           = 0555,
-               .child          = randomize_mac_table,
-       },
-       { }
-};
-
-static struct ctl_table dev_table[] =
-{
-       {
-               .procname       = "dev",
-               .maxlen         = 0,
-               .mode           = 0555,
-               .child          = cnss_table,
-       },
-       { }
-};
-
-static int __init init_randomize_mac(void)
-{
-	register_sysctl_table(dev_table);
-	return 0;
-}
-late_initcall(init_randomize_mac);
-
 /**
  * hdd_platform_wlan_mac() - API to get mac addresses from platform driver
  * @hdd_ctx: HDD Context
@@ -9826,7 +9811,6 @@ static int hdd_platform_wlan_mac(hdd_context_t *hdd_ctx)
 	uint32_t max_mac_addr = QDF_MAX_CONCURRENCY_PERSONA;
 	uint32_t mac_addr_size = QDF_MAC_ADDR_SIZE;
 	uint8_t *addr, *buf;
-	u8 addr_random[QDF_MAX_CONCURRENCY_PERSONA * QDF_MAC_ADDR_SIZE];
 	struct device *dev = hdd_ctx->parent_dev;
 	tSirMacAddr mac_addr;
 	QDF_STATUS status;
@@ -9837,13 +9821,6 @@ static int hdd_platform_wlan_mac(hdd_context_t *hdd_ctx)
 		return -EINVAL;
 
 	hdd_free_mac_address_lists(hdd_ctx);
-
-	if (randomize_mac) {
-		memcpy(addr_random, addr, no_of_mac_addr * mac_addr_size);
-		for (iter = 0; iter < no_of_mac_addr * mac_addr_size; iter += QDF_MAC_ADDR_SIZE)
-			get_random_bytes(&addr_random[iter + 3], 3);
-		addr = addr_random;
-	}
 
 	if (no_of_mac_addr > max_mac_addr)
 		no_of_mac_addr = max_mac_addr;
