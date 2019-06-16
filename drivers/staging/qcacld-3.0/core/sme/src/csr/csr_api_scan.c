@@ -1615,23 +1615,16 @@ static bool csr_is_better_bss(tpAniSirGlobal mac_ctx,
 	return ret;
 }
 
-/* Add the channel to the occupiedChannels array */
-static void csr_scan_add_to_occupied_channels(tpAniSirGlobal pMac,
-					struct tag_csrscan_result *pResult,
-					uint8_t sessionId,
-					tCsrChannel *occupied_ch,
-					tDot11fBeaconIEs *pIes,
-					bool is_init_list)
+/* Add special channel to the occupiedChannels array */
+static void csr_add_to_occupied_channels(tpAniSirGlobal pMac,
+					 uint8_t ch,
+					 uint8_t sessionId,
+					 tCsrChannel *occupied_ch,
+					 bool is_init_list)
 {
 	QDF_STATUS status;
-	uint8_t ch;
 	uint8_t num_occupied_ch = occupied_ch->numChannels;
 	uint8_t *occupied_ch_lst = occupied_ch->channelList;
-
-	ch = pResult->Result.BssDescriptor.channelId;
-	if (!csr_neighbor_roam_connected_profile_match(pMac,
-						sessionId, pResult, pIes))
-		return;
 
 	if (is_init_list)
 		pMac->scan.roam_candidate_count[sessionId]++;
@@ -1651,6 +1644,29 @@ static void csr_scan_add_to_occupied_channels(tpAniSirGlobal pMac,
 			occupied_ch->numChannels =
 				CSR_BG_SCAN_OCCUPIED_CHANNEL_LIST_LEN;
 	}
+}
+
+/* Add the channel to the occupiedChannels array */
+static void csr_scan_add_to_occupied_channels(
+					tpAniSirGlobal pMac,
+					struct tag_csrscan_result *pResult,
+					uint8_t sessionId,
+					tCsrChannel *occupied_ch,
+					tDot11fBeaconIEs *pIes,
+					bool is_init_list)
+{
+	uint8_t ch;
+
+	ch = pResult->Result.BssDescriptor.channelId;
+	if (!csr_neighbor_roam_connected_profile_match(pMac, sessionId,
+						       pResult, pIes))
+		return;
+	csr_add_to_occupied_channels(
+				pMac,
+				ch,
+				sessionId,
+				occupied_ch,
+				is_init_list);
 }
 
 /* Put the BSS into the scan result list */
@@ -4285,7 +4301,6 @@ QDF_STATUS csr_set_country_code(tpAniSirGlobal pMac, uint8_t *pCountry)
 	return status;
 }
 
-#ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 /* caller allocated memory for pNumChn and pChnPowerInfo */
 /* As input, *pNumChn has the size of the array of pChnPowerInfo */
 /* Upon return, *pNumChn has the number of channels assigned. */
@@ -4314,6 +4329,7 @@ static void csr_get_channel_power_info(tpAniSirGlobal pMac, tDblLinkList *list,
 
 }
 
+#ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 static void csr_diag_apply_country_info(tpAniSirGlobal mac_ctx)
 {
 	host_log_802_11d_pkt_type *p11dLog;
@@ -6091,9 +6107,9 @@ send_scan_req:
 	return status;
 }
 
+#ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 static void csr_diag_scan_channels(tpAniSirGlobal pMac, tSmeCmd *pCommand)
 {
-#ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 	host_log_scan_pkt_type *pScanLog = NULL;
 
 	WLAN_HOST_DIAG_LOG_ALLOC(pScanLog,
@@ -6126,8 +6142,10 @@ static void csr_diag_scan_channels(tpAniSirGlobal pMac, tSmeCmd *pCommand)
 		      pScanLog->numChannel);
 	}
 	WLAN_HOST_DIAG_LOG_REPORT(pScanLog);
-#endif
 }
+#else
+#define csr_diag_scan_channels(tpAniSirGlobal pMac, tSmeCmd *pCommand) (void)0;
+#endif /* #ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR */
 
 static QDF_STATUS csr_scan_channels(tpAniSirGlobal pMac, tSmeCmd *pCommand)
 {
@@ -8025,6 +8043,7 @@ void csr_init_occupied_channels_list(tpAniSirGlobal pMac, uint8_t sessionId)
 	tDot11fBeaconIEs *pIes = NULL;
 	tpCsrNeighborRoamControlInfo pNeighborRoamInfo =
 		&pMac->roam.neighborRoamInfo[sessionId];
+	tCsrRoamConnectedProfile *profile = NULL;
 
 	if (0 != pNeighborRoamInfo->cfgParams.channelInfo.numOfChannels) {
 		/*
@@ -8044,9 +8063,19 @@ void csr_init_occupied_channels_list(tpAniSirGlobal pMac, uint8_t sessionId)
 		return;
 	}
 
+	profile = &pMac->roam.roamSession[sessionId].connectedProfile;
+	if (!profile)
+		return;
+
 	/* Empty occupied channels here */
 	pMac->scan.occupiedChannels[sessionId].numChannels = 0;
 	pMac->scan.roam_candidate_count[sessionId] = 0;
+
+	csr_add_to_occupied_channels(
+			pMac, profile->operationChannel,
+			sessionId,
+			&pMac->scan.occupiedChannels[sessionId],
+			false);
 
 	csr_ll_lock(&pMac->scan.scanResultList);
 	pEntry = csr_ll_peek_head(&pMac->scan.scanResultList, LL_ACCESS_NOLOCK);
